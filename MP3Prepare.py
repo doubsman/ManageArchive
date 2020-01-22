@@ -1,12 +1,15 @@
+#! /usr/bin/python
+# coding: utf-8
+
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QObject, qDebug, QDateTime
 from os import walk, rename, path, mkdir, remove, rmdir
 from sys import argv
 from codecs import open
-from urllib import request, parse
+from urllib import request
 import requests
 from glob import glob
-from shutil import move
+from shutil import move, copytree
 from bs4 import BeautifulSoup
 # pip install bs4
 from pyunpack import Archive
@@ -40,50 +43,57 @@ class ManageArchivesMP3(QObject):
 		# extract file archives list
 		for self.fileName in self.fileNames:
 			self.beatPort = ""
-			self.writeLogFile('Traitement: ' + '"' + self.fileName + '"')
+			self.beatPortCover = ""
+			self.catalogLabel = ""
+			self.writeLogFile('START OPERATIONS', self.fileName, True)
 			# clean name
 			self.fileArchive = path.join(self.pathExtract, self.fileName)
-			self.writeLogFile('  BEFORE : ' + self.fileName)
+			self.writeLogFile('ARCHIVE NAME', self.fileName)
 			self.cleanFolderName()
-			self.writeLogFile('  AFTER  : ' + self.cleanName)
+			self.writeLogFile('CLEAN NAME', self.cleanName)
 			# search url beatport
 			self.searchBeatPort()
-			self.writeLogFile('  BEPORT : ' + self.beatPort)
-			# find reference catalog label with BeatPort
-			self.findCatalogLabelBeatPort()
+			if self.beatPort == '':
+				self.writeLogFile('BEATPORT URL PRODUCT', 'not find')
+			else:
+				self.writeLogFile('BEATPORT URL PRODUCT', self.beatPort)
+				# find reference catalog label with BeatPort
+				self.findCatalogLabelBeatPort()
 			# build folder name
 			if self.catalogLabel == "" or self.cleanName[0] == '[':
 				self.folderArchive = path.join(self.pathExtract, self.cleanName)
+				self.writeLogFile('FOLDER', self.cleanName)
 			else:
 				self.folderArchive = path.join(self.pathExtract, "[" + self.catalogLabel + "] " + self.cleanName)
-			self.writeLogFile('  FOLDER : ' + self.folderArchive)
+				self.writeLogFile('FOLDER', "[" + self.catalogLabel + "] " + self.cleanName)
 			# exist ?
 			if not path.exists(self.folderArchive):
 				# extract
-				self.writeLogFile('  CREATE : ' + self.folderArchive)
+				self.writeLogFile('CREATE FOLDER', self.folderArchive)
 				mkdir(self.folderArchive)
-				self.writeLogFile('  EXTRACT: ' + self.fileArchive)
+				self.writeLogFile('EXTRACTION', self.fileArchive)
 				Archive(self.fileArchive).extractall(self.folderArchive)
 				# correction parasit folder
 				resultFiles = self.listFiles(self.folderArchive)
 				resultfolders = self.listFolders(self.folderArchive)
 				if len(resultFiles) == 0 and len(resultfolders) == 1:
-					self.writeLogFile('  FOLDER : (' + str(len(resultFiles)) + ', ' + str(len(resultfolders)) + ') DELETE "' + resultfolders[0]+ '"')
+					self.writeLogFile('CORECTION FOLDER', '(' + str(len(resultFiles)) + ', ' + str(len(resultfolders)) + ') MOVE FILES')
 					src = path.join(self.folderArchive, resultfolders[0])
 					self.moveAllFilesinDir(src, self.folderArchive)
+					self.writeLogFile('CORECTION FOLDER', 'DELETE "' + resultfolders[0]+ '"')					
 					rmdir(src)
 				# no cover, download with BeatPort
 				covers = list(self.getListFiles(self.folderArchive, ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.bmp', '.tiff')))
 				if len(covers) == 0:
 					# download cover
 					self.downloadCoverBeatPort()
-					self.writeLogFile('  COVER  : ' + self.beatPortCover)
-					self.writeLogFile('  WRITE  : ' + path.join(self.folderArchive, "cover.jpg"))
-				#self.writeLogFile('  DELETE : ' + self.fileArchive)
+					self.writeLogFile('COVER URL BEATPORT', self.beatPortCover)
+					self.writeLogFile('WRITE COVER FILE', path.join(self.folderArchive, "cover.jpg"))
+				#self.writeLogFile('  DELETE', self.fileArchive)
 				#remove(self.fileArchive)
 			else:
-				self.writeLogFile('  EXIST  : ' + self.folderArchive)
-			self.writeLogFile("\n")
+				self.writeLogFile('FOLDER EXIST', self.folderArchive)
+			self.writeLogFile('END OPERATION.',"", True)
 
 	def listFiles(self, path):
 		"""Build list files."""
@@ -102,7 +112,7 @@ class ManageArchivesMP3(QObject):
 		# Check if both the are directories
 		if path.isdir(srcDir) and path.isdir(dstDir) :
 			# Iterate over all the files in source directory
-			for filePath in glob(srcDir + '\*'):
+			for filePath in glob(srcDir.replace('[', '[[]') + '\*'): #, recursive=True):
 				# Move each file to destination Directory
 				move(filePath, dstDir)
 
@@ -147,13 +157,13 @@ class ManageArchivesMP3(QObject):
 						self.cleanName = tab[0].strip() + " - " + tab[1].strip() + " (" + tab[3].strip() + ")" 
 					else:
 						if len(tab) == 6:
-							self.cleanName = "[" + tab[2].strip().Replace("(","").Replace(")","") + "] " +  tab[0].trim() + " - " + tab[1].trim + " (" + tab[4].trim + ")"
+							self.cleanName = "[" + tab[2].strip().replace("(","").replace(")","") + "] " +  tab[0].strip() + " - " + tab[1].strip() + " (" + tab[4].strip() + ")"
 		self.cleanName = self.cleanName.strip()
 
 	def searchBeatPort(self):
 		"""Search product www.beatport.com and extract url product."""
 		self.beatPort = ""
-		query = parse.quote(self.cleanName)
+		query = self.cleanName.replace('VA - ', '').replace(' ', '+')
 		url = "https://www.beatport.com/search?q=" + query
 		response = request.urlopen(url)
 		html = response.read()
@@ -188,13 +198,20 @@ class ManageArchivesMP3(QObject):
 			self.catalogLabel = vid.contents[5].contents[3].contents[0]
 			break
 
-	def writeLogFile(self, line, writeconsole = True):
+	def writeLogFile(self, operation, line, notmodification = False, writeconsole = True):
 		"""Write log file."""
+		if not notmodification:
+			logline = '{:>22} : {}  '.format(operation, line)
+		else:
+			if line == "":
+				logline = operation + "\n"
+			else:
+				logline = '{} "{}"'.format(operation, line)
 		text_file = open(self.logFileName, "a", 'utf-8')
-		text_file.write(line+"\n")
+		text_file.write(logline+"\n")
 		text_file.close()
 		if writeconsole:
-			print(line)
+			print(logline)
 
 if __name__ == '__main__':
 	app = QApplication(argv)
