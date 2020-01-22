@@ -2,7 +2,7 @@
 # coding: utf-8
 
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QObject, qDebug, QDateTime
+from PyQt5.QtCore import QObject, qDebug, QDateTime, QProcess
 from os import walk, rename, path, mkdir, remove, rmdir
 from sys import argv
 from codecs import open
@@ -39,13 +39,15 @@ class ManageArchivesMP3(QObject):
 	def processExtractionFiles(self):
 		"""Extract list Archives."""
 		# build list
-		self.fileNames = self.listFiles(self.pathExtract)
+		#self.fileNames = self.listFiles(self.pathExtract)
+		self.fileNames = list(self.getListFiles(self.pathExtract, ('.zip', '.rar')))
 		# extract file archives list
 		for self.fileName in self.fileNames:
+			self.fileName = path.basename(self.fileName)
 			self.beatPort = ""
 			self.beatPortCover = ""
 			self.catalogLabel = ""
-			self.writeLogFile('START OPERATIONS', self.fileName, True)
+			self.writeLogFile('START OPERATIONS', self.pathExtract, True)
 			# clean name
 			self.fileArchive = path.join(self.pathExtract, self.fileName)
 			self.writeLogFile('ARCHIVE NAME', self.fileName)
@@ -93,7 +95,8 @@ class ManageArchivesMP3(QObject):
 				#remove(self.fileArchive)
 			else:
 				self.writeLogFile('FOLDER EXIST', self.folderArchive)
-			self.writeLogFile('END OPERATION.',"", True)
+		self.writeLogFile('END OPERATIONS.',"", True)
+		self.runCommand('notepad.exe', self.logFileName)
 
 	def listFiles(self, path):
 		"""Build list files."""
@@ -122,7 +125,7 @@ class ManageArchivesMP3(QObject):
 		for folderName, subfolders, filenames in walk(folder):
 			if subfolders:
 				for subfolder in subfolders:
-					getListFiles(subfolder, masks, exact)
+					self.getListFiles(subfolder, masks, exact)
 			for filename in filenames:
 				if masks is None:
 					# no mask
@@ -142,7 +145,8 @@ class ManageArchivesMP3(QObject):
 									yield path.join(folderName, filename)
 
 	def cleanFolderName(self):
-		self.cleanName = self.fileName.replace("-psy-music.ru","").replace("_"," ").replace("--","-")
+		self.cleanName = self.fileName
+		self.cleanName = self.cleanName.replace("-psy-music.ru","").replace("_"," ").replace("--","-")
 		tab = self.cleanName[:-4].split('-')
 		if len(tab) == 2: 
 			self.cleanName = tab[0].strip() + " - " + tab[1].strip()
@@ -213,9 +217,23 @@ class ManageArchivesMP3(QObject):
 		if writeconsole:
 			print(logline)
 
+	def runCommand(self, prog, *argv):
+		"""Execut a program no wait, no link."""
+		argums = []
+		for arg in argv:
+			argums += (arg,)
+		p = QProcess()
+		p.startDetached(prog, argums)
+
 if __name__ == '__main__':
 	app = QApplication(argv)
+	if len(argv)>1:
+		# prod
+		myfolder = argv[1]
+	else:
+		# test envt
+		myfolder = "D:\\WorkDev\\MP3TrtFiles"
 	# class
-	BuildProcess = ManageArchivesMP3("D:\\WorkDev\\MP3TrtFiles")
+	BuildProcess = ManageArchivesMP3(myfolder)
 	# download list
 	BuildProcess.processExtractionFiles()
