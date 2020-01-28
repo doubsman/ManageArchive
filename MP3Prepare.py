@@ -2,14 +2,14 @@
 # coding: utf-8
 
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QObject, qDebug, QDateTime, QProcess
-from os import walk, rename, path, mkdir, remove, rmdir
+from PyQt5.QtCore import QObject, qDebug, QDateTime
+from os import walk, rename, path, mkdir, remove, rmdir, startfile
 from sys import argv
 from codecs import open
 from urllib import request
 import requests
 from glob import glob
-from shutil import move, copytree
+from shutil import move
 from bs4 import BeautifulSoup
 # pip install bs4
 from pyunpack import Archive
@@ -21,10 +21,10 @@ from pyunpack import Archive
 class ManageArchivesMP3(QObject):
 	"""build list folders name, search youtube and download first video find format mp4."""
 						
-	def __init__(self, pathExtract, parent=None):
+	def __init__(self, parent=None):
 		"""Init."""
 		super(ManageArchivesMP3, self).__init__(parent)
-		self.pathExtract = pathExtract
+		self.pathExtract = ""
 		self.parent = parent
 		self.fileNames = None
 		self.fileName = None
@@ -36,18 +36,20 @@ class ManageArchivesMP3(QObject):
 		self.logFileName = QDateTime.currentDateTime().toString('yyMMddhhmmss') + "_ManageArchivesMP3.log"
 		self.logFileName = path.join(path.dirname(path.abspath(__file__)), "LOG", self.logFileName)
 
-	def processExtractionFiles(self):
+	def processExtractionFiles(self, pathExtract):
 		"""Extract list Archives."""
+		self.pathExtract = pathExtract
 		# build list
 		#self.fileNames = self.listFiles(self.pathExtract)
 		self.fileNames = list(self.getListFiles(self.pathExtract, ('.zip', '.rar')))
 		# extract file archives list
+		count = 1
 		for self.fileName in self.fileNames:
 			self.fileName = path.basename(self.fileName)
 			self.beatPort = ""
 			self.beatPortCover = ""
 			self.catalogLabel = ""
-			self.writeLogFile('START OPERATIONS', self.pathExtract, True)
+			self.writeLogFile('START OPERATIONS ({}/{})'.format(str(count),str(len(self.fileNames))), self.pathExtract, False)
 			# clean name
 			self.fileArchive = path.join(self.pathExtract, self.fileName)
 			self.writeLogFile('ARCHIVE NAME', self.fileName)
@@ -93,10 +95,11 @@ class ManageArchivesMP3(QObject):
 					self.writeLogFile('WRITE COVER FILE', path.join(self.folderArchive, "cover.jpg"))
 				#self.writeLogFile('  DELETE', self.fileArchive)
 				#remove(self.fileArchive)
+				count += 1
 			else:
 				self.writeLogFile('FOLDER EXIST', self.folderArchive)
-		self.writeLogFile('END OPERATIONS.',"", True)
-		self.runCommand('notepad.exe', self.logFileName)
+		self.writeLogFile('END OPERATIONS.',"", False)
+		startfile(self.logFileName)
 
 	def listFiles(self, path):
 		"""Build list files."""
@@ -202,9 +205,9 @@ class ManageArchivesMP3(QObject):
 			self.catalogLabel = vid.contents[5].contents[3].contents[0]
 			break
 
-	def writeLogFile(self, operation, line, notmodification = False, writeconsole = True):
+	def writeLogFile(self, operation, line, modification = True, writeconsole = True):
 		"""Write log file."""
-		if not notmodification:
+		if modification:
 			logline = '{:>22} : {}  '.format(operation, line)
 		else:
 			if line == "":
@@ -217,13 +220,6 @@ class ManageArchivesMP3(QObject):
 		if writeconsole:
 			print(logline)
 
-	def runCommand(self, prog, *argv):
-		"""Execut a program no wait, no link."""
-		argums = []
-		for arg in argv:
-			argums += (arg,)
-		p = QProcess()
-		p.startDetached(prog, argums)
 
 if __name__ == '__main__':
 	app = QApplication(argv)
@@ -234,6 +230,6 @@ if __name__ == '__main__':
 		# test envt
 		myfolder = "D:\\WorkDev\\MP3TrtFiles"
 	# class
-	BuildProcess = ManageArchivesMP3(myfolder)
+	BuildProcess = ManageArchivesMP3()
 	# download list
-	BuildProcess.processExtractionFiles()
+	BuildProcess.processExtractionFiles(myfolder)
