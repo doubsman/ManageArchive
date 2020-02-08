@@ -98,7 +98,7 @@ class ManageArchivesMP3(QObject):
 				count += 1
 			else:
 				self.writeLogFile('FOLDER EXIST', self.folderArchive)
-		self.writeLogFile('END OPERATIONS.',"", False)
+		self.writeLogFile('END OPERATIONS.\n',"", False)
 		startfile(self.logFileName)
 
 	def listFiles(self, path):
