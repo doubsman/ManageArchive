@@ -3,19 +3,19 @@
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QObject, qDebug, QDateTime
-from os import walk, rename, path, mkdir, remove, rmdir, startfile
-from sys import argv
-from codecs import open
+from os import rename, path, mkdir, remove, rmdir, startfile
+from sys import argv, path as syspath
 from urllib import request
 import requests
-from glob import glob
-from shutil import move
 from bs4 import BeautifulSoup
 # pip install bs4
 from pyunpack import Archive
 # pip install pyunpack
-# pip install patool
+# pip install patool ?
 # rar.exe or 7zip.exe 
+syspath.append(path.dirname(path.dirname(path.abspath(__file__))))
+from LogPrintFile.LogPrintFile import LogPrintFile
+from FilesProcessing.FilesProcessing import FilesProcessing
 
 
 class ManageArchivesMP3(QObject):
@@ -33,15 +33,16 @@ class ManageArchivesMP3(QObject):
 		self.beatPort = ""
 		self.beatPortCover = ""
 		self.catalogLabel = ""
-		self.logFileName = QDateTime.currentDateTime().toString('yyMMddhhmmss') + "_ManageArchivesMP3.log"
-		self.logFileName = path.join(path.dirname(path.abspath(__file__)), "LOG", self.logFileName)
+		self.FilesProcess = FilesProcessing(self)
+		self.logProcess = LogPrintFile(path.join(path.dirname(path.abspath(__file__)), 'LOG'), 'ManageArchivesMP3', True, 30)
 
 	def processExtractionFiles(self, pathExtract):
 		"""Extract list Archives."""
 		self.pathExtract = pathExtract
 		# build list
 		#self.fileNames = self.listFiles(self.pathExtract)
-		self.fileNames = list(self.getListFiles(self.pathExtract, ('.zip', '.rar')))
+		#self.fileNames = list(self.getListFiles(self.pathExtract, ('.zip', '.rar')))
+		self.fileNames = self.FilesProcess.folder_list_files(self.pathExtract, False, ('.zip', '.rar'))
 		# extract file archives list
 		count = 1
 		for self.fileName in self.fileNames:
@@ -49,103 +50,63 @@ class ManageArchivesMP3(QObject):
 			self.beatPort = ""
 			self.beatPortCover = ""
 			self.catalogLabel = ""
-			self.writeLogFile('START OPERATIONS ({}/{})'.format(str(count),str(len(self.fileNames))), self.pathExtract, False)
+			self.logProcess.write_log_file('START OPERATIONS ({}/{})'.format(str(count),str(len(self.fileNames))), self.pathExtract, False)
 			# clean name
 			self.fileArchive = path.join(self.pathExtract, self.fileName)
-			self.writeLogFile('ARCHIVE NAME', self.fileName)
+			self.logProcess.write_log_file('ARCHIVE NAME', self.fileName)
 			self.cleanFolderName()
-			self.writeLogFile('CLEAN NAME', self.cleanName)
+			self.logProcess.write_log_file('CLEAN NAME', self.cleanName)
 			# search url beatport
 			self.searchBeatPort()
 			if self.beatPort == '':
-				self.writeLogFile('BEATPORT URL PRODUCT', 'not find')
+				self.logProcess.write_log_file('BEATPORT URL PRODUCT', 'not find')
 			else:
-				self.writeLogFile('BEATPORT URL PRODUCT', self.beatPort)
+				self.logProcess.write_log_file('BEATPORT URL PRODUCT', self.beatPort)
 				# find reference catalog label with BeatPort
 				self.findCatalogLabelBeatPort()
 			# build folder name
 			if self.catalogLabel == "" or self.cleanName[0] == '[':
 				self.folderArchive = path.join(self.pathExtract, self.cleanName)
-				self.writeLogFile('FOLDER', self.cleanName)
+				self.logProcess.write_log_file('FOLDER', self.cleanName)
 			else:
 				self.folderArchive = path.join(self.pathExtract, "[" + self.catalogLabel + "] " + self.cleanName)
-				self.writeLogFile('FOLDER', "[" + self.catalogLabel + "] " + self.cleanName)
+				self.logProcess.write_log_file('FOLDER', "[" + self.catalogLabel + "] " + self.cleanName)
 			# exist ?
 			if not path.exists(self.folderArchive):
 				# extract
-				self.writeLogFile('CREATE FOLDER', self.folderArchive)
+				self.logProcess.write_log_file('CREATE FOLDER', self.folderArchive)
 				mkdir(self.folderArchive)
-				self.writeLogFile('EXTRACTION', self.fileArchive)
+				self.logProcess.write_log_file('EXTRACTION', self.fileArchive)
 				Archive(self.fileArchive).extractall(self.folderArchive)
 				# correction parasit folder
-				resultFiles = self.listFiles(self.folderArchive)
-				resultfolders = self.listFolders(self.folderArchive)
+				#resultFiles = self.listFiles(self.folderArchive)
+				resultFiles = self.FilesProcess.folder_list_files(self.folderArchive, False)
+				#resultfolders = self.listFolders(self.folderArchive)
+				resultfolders = self.FilesProcess.folder_list_folders(self.folderArchive)
 				if len(resultFiles) == 0 and len(resultfolders) == 1:
-					self.writeLogFile('CORECTION FOLDER', '(' + str(len(resultFiles)) + ', ' + str(len(resultfolders)) + ') MOVE FILES')
+					self.logProcess.write_log_file('CORECTION FOLDER', '(' + str(len(resultFiles)) + ', ' + str(len(resultfolders)) + ') MOVE FILES')
 					src = path.join(self.folderArchive, resultfolders[0])
-					self.moveAllFilesinDir(src, self.folderArchive)
-					self.writeLogFile('CORECTION FOLDER', 'DELETE "' + resultfolders[0]+ '"')					
+					#self.moveAllFilesinDir(src, self.folderArchive)
+					self.FilesProcess.folder_move(src, self.folderArchive)
+					self.logProcess.write_log_file('CORECTION FOLDER', 'DELETE "' + resultfolders[0]+ '"')					
 					rmdir(src)
 				# no cover, download with BeatPort
-				covers = list(self.getListFiles(self.folderArchive, ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.bmp', '.tiff')))
+				covers = self.FilesProcess.folder_list_files(self.folderArchive, True, ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.bmp', '.tiff'))
+				#covers = list(self.getListFiles(self.folderArchive, ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.bmp', '.tiff')))
 				if len(covers) == 0:
 					# download cover
 					self.downloadCoverBeatPort()
-					self.writeLogFile('COVER URL BEATPORT', self.beatPortCover)
-					self.writeLogFile('WRITE COVER FILE', path.join(self.folderArchive, "cover.jpg"))
-				#self.writeLogFile('  DELETE', self.fileArchive)
+					self.logProcess.write_log_file('COVER URL BEATPORT', self.beatPortCover)
+					self.logProcess.write_log_file('WRITE COVER FILE', path.join(self.folderArchive, "cover.jpg"))
+				#self.logProcess.write_log_file('  DELETE', self.fileArchive)
 				#remove(self.fileArchive)
 				count += 1
 			else:
-				self.writeLogFile('FOLDER EXIST', self.folderArchive)
-		self.writeLogFile('END OPERATIONS.\n',"", False)
-		startfile(self.logFileName)
-
-	def listFiles(self, path):
-		"""Build list files."""
-		for _, _, filenames in walk(path):
-			break
-		return filenames
-
-	def listFolders(self, path):
-		"""Build list folders."""
-		for _, dirs, _ in walk(path):
-			break
-		return dirs
-
-	def moveAllFilesinDir(self, srcDir, dstDir):
-		"""Move files and folders command."""
-		# Check if both the are directories
-		if path.isdir(srcDir) and path.isdir(dstDir) :
-			# Iterate over all the files in source directory
-			for filePath in glob(srcDir.replace('[', '[[]') + '\*'): #, recursive=True):
-				# Move each file to destination Directory
-				move(filePath, dstDir)
-
-	def getListFiles(self, folder, masks=None, exact=None):
-		"""Build files list."""
-		blacklist = ['desktop.ini', 'Thumbs.db']
-		for folderName, subfolders, filenames in walk(folder):
-			if subfolders:
-				for subfolder in subfolders:
-					self.getListFiles(subfolder, masks, exact)
-			for filename in filenames:
-				if masks is None:
-					# no mask
-					if filename not in blacklist:
-						yield path.join(folderName, filename)
-				else:
-					# same
-					if exact:
-						if filename.lower() in masks:
-							if filename not in blacklist:
-									yield path.join(folderName, filename)
-					else:
-						# mask joker
-						for xmask in masks:
-							if filename[-len(xmask):].lower() in xmask:
-								if filename not in blacklist:
-									yield path.join(folderName, filename)
+				self.logProcess.write_log_file('FOLDER EXIST', self.folderArchive)
+			# next
+			self.logProcess.write_log_file('-'*22, '')
+		self.logProcess.write_log_file('END OPERATIONS.\n',"", False)
+		self.logProcess.view_log_file()
 
 	def cleanFolderName(self):
 		self.cleanName = self.fileName
@@ -204,21 +165,6 @@ class ManageArchivesMP3(QObject):
 		for vid in soup.findAll(attrs={'class':'interior-release-chart-content-list interior-release-chart-content-item--desktop'}):
 			self.catalogLabel = vid.contents[5].contents[3].contents[0]
 			break
-
-	def writeLogFile(self, operation, line, modification = True, writeconsole = True):
-		"""Write log file."""
-		if modification:
-			logline = '{:>22} : {}  '.format(operation, line)
-		else:
-			if line == "":
-				logline = operation + "\n"
-			else:
-				logline = '{} "{}"'.format(operation, line)
-		text_file = open(self.logFileName, "a", 'utf-8')
-		text_file.write(logline+"\n")
-		text_file.close()
-		if writeconsole:
-			print(logline)
 
 
 if __name__ == '__main__':
