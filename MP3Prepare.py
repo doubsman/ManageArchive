@@ -40,10 +40,9 @@ class ManageArchivesMP3(QObject):
 		"""Extract list Archives."""
 		self.pathExtract = pathExtract
 		# build list
-		#self.fileNames = self.listFiles(self.pathExtract)
-		#self.fileNames = list(self.getListFiles(self.pathExtract, ('.zip', '.rar')))
 		self.fileNames = self.FilesProcess.folder_list_files(self.pathExtract, False, ('.zip', '.rar'))
 		# extract file archives list
+		self.anomalies = False
 		count = 1
 		for self.fileName in self.fileNames:
 			self.fileName = path.basename(self.fileName)
@@ -79,25 +78,24 @@ class ManageArchivesMP3(QObject):
 				self.logProcess.write_log_file('EXTRACTION', self.fileArchive)
 				Archive(self.fileArchive).extractall(self.folderArchive)
 				# correction parasit folder
-				#resultFiles = self.listFiles(self.folderArchive)
 				resultFiles = self.FilesProcess.folder_list_files(self.folderArchive, False)
-				#resultfolders = self.listFolders(self.folderArchive)
 				resultfolders = self.FilesProcess.folder_list_folders(self.folderArchive)
 				if len(resultFiles) == 0 and len(resultfolders) == 1:
 					self.logProcess.write_log_file('CORECTION FOLDER', '(' + str(len(resultFiles)) + ', ' + str(len(resultfolders)) + ') MOVE FILES')
 					src = path.join(self.folderArchive, resultfolders[0])
-					#self.moveAllFilesinDir(src, self.folderArchive)
 					self.FilesProcess.folder_move(src, self.folderArchive)
 					self.logProcess.write_log_file('CORECTION FOLDER', 'DELETE "' + resultfolders[0]+ '"')					
 					rmdir(src)
 				# no cover, download with BeatPort
 				covers = self.FilesProcess.folder_list_files(self.folderArchive, True, ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.bmp', '.tiff'))
-				#covers = list(self.getListFiles(self.folderArchive, ('.jpg', '.jpeg', '.png', '.bmp', '.tif', '.bmp', '.tiff')))
-				if len(covers) == 0:
+				if len(covers) == 0 and self.beatPort != '':
 					# download cover
 					self.downloadCoverBeatPort()
 					self.logProcess.write_log_file('COVER URL BEATPORT', self.beatPortCover)
 					self.logProcess.write_log_file('WRITE COVER FILE', path.join(self.folderArchive, "cover.jpg"))
+				else:
+					self.logProcess.write_log_file('COVER URL BEATPORT', 'No Cover')
+					self.anomalies = True
 				#self.logProcess.write_log_file('  DELETE', self.fileArchive)
 				#remove(self.fileArchive)
 				count += 1
@@ -105,7 +103,10 @@ class ManageArchivesMP3(QObject):
 				self.logProcess.write_log_file('FOLDER EXIST', self.folderArchive)
 			# next
 			self.logProcess.write_log_file('-'*22, '')
-		self.logProcess.write_log_file('END OPERATIONS.\n',"", False)
+		if self.anomalies:
+			self.logProcess.write_log_file('END OPERATIONS.\n', "problem cover", False)
+		else:
+			self.logProcess.write_log_file('END OPERATIONS.\n', '', False)
 		self.logProcess.view_log_file()
 
 	def cleanFolderName(self):
@@ -174,7 +175,7 @@ if __name__ == '__main__':
 		myfolder = argv[1]
 	else:
 		# test envt
-		myfolder = "D:\\WorkDev\\MP3TrtFiles"
+		myfolder = r'D:\WorkDev\MP3TrtFiles'
 	# class
 	BuildProcess = ManageArchivesMP3()
 	# download list
